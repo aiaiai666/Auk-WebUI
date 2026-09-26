@@ -66,6 +66,7 @@ https://github.com/user-attachments/assets/c532bbdb-e6ce-4434-a9a5-16f29a8d4135
   - [ComfyUI](#comfyui)
   - [Python API](#python-api)
 - [Fine-tuning](#fine-tuning)
+- [WebUI (quick start)](#webui-quick-start)
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
 - [Citation](#citation)
@@ -602,6 +603,18 @@ bash scripts/train.sh
 ```
 
 > **📖 For the full guide** — configuration reference, dynamic batching, checkpoints & resuming, EMA, monitoring, and troubleshooting — see [**docs/FINETUNING.md**](docs/FINETUNING.md).
+
+## WebUI (quick start)
+
+Besides the built-in Gradio demo (`auk-gradio`), the repository ships a secondary-development WebUI in [`webui/app.py`](webui/app.py). It starts **without loading any model** (lazy loading on first generation), writes every result to `outputs/outputs_YYYYMMDD_HHMMSS.wav`, and is reachable from other devices on port 7860.
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+python scripts/download_models.py     # download weights into ckpts/ + SHA-256 verify
+./start_app.sh 7860                   # frees the port, clears the GPU, then launches
+```
+
+`start_app.sh` terminates any stale process on port 7860 without prompting (and only that process), confirms the port is really released via `fuser $port/tcp`, and clears other GPU processes so the run owns the GPU. It defaults to `cpu_offload`, needed because AuK Base peaks at ~24.78 GiB — more than a 24 GiB card. See [`docs/WEBUI.md`](docs/WEBUI.md) for parameters, Prompt Enhancer, and the four tabs.
 
 ## Contributing
 

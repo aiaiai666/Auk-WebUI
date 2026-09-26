@@ -1,3 +1,7 @@
+# Generated audio from the WebUI (webui/app.py) and CLI runs.
+outputs/*
+!outputs/.gitkeep
+
 # Model weights / checkpoints (distributed separately, not via git).
 # Keep the empty ckpts/ dir so users can drop downloaded weights straight in.
 ckpts/*
@@ -50,3 +54,10 @@ docs/session/
 docs/task/
 CLAUDE.md
 AGENTS.md
+
+# Jupyter / editor checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Local agent/session tooling state
+.stepcode/
