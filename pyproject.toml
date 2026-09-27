@@ -23,6 +23,10 @@ dependencies = [
     # Qwen2.5-Omni support landed in transformers 4.52; the release was validated on 4.57.
     "transformers>=4.52.0,<5",
     "qwen-omni-utils>=0.0.9",
+    # qwen-omni-utils imports audioread at module scope but omits it from its own metadata,
+    # so auk.infer.pe and AukInfer.build_cond_inputs both die with ModuleNotFoundError
+    # unless it is installed explicitly.
+    "audioread>=3.3",
     "omegaconf>=2.3.0",
     "torchdiffeq",
     "x_transformers>=1.31.14",
