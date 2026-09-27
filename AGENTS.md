@@ -12,7 +12,8 @@ The package uses a `src/` layout:
 - `comfyui/` — ComfyUI nodes and `auk.json` workflow; `docs/` — guides; `assets/` — demo audio; `ckpts/` — weights (gitignored, downloaded at runtime).
 - `webui/app.py` — **secondary-development WebUI** (`python -m webui.app`); it is a standalone panel built on `src/auk/infer/` and is not imported by `auk-gradio`. Its Examples tab parses every example command out of `README.md` at page load, so docs and UI stay in sync.
 - `scripts/download_models.py` — downloads weights into `ckpts/` (aria2c multi-threaded) and verifies each file's SHA-256 against its Git-LFS pointer.
-- `start_app.sh` — one-shot launcher: frees port 7860, clears other GPU processes, then starts `webui/app.py` on `0.0.0.0:7860`.
+- `scripts/local_llm_server.py` — serves `ckpts/Qwen2.5-Omni-3B` as an OpenAI-compatible `/v1/chat/completions` so the Prompt Enhancer needs no cloud LLM; `start_app.sh` auto-starts it when `.env`'s `LLM_BASE_URL` points at loopback.
+- `start_app.sh` — one-shot launcher: loads `.env`, frees port 7860, clears other GPU processes (exempting the local LLM server by port), auto-starts that server, then starts `webui/app.py` on `0.0.0.0:7860`.
 - `outputs/` — generated wav files, named `outputs_YYYYMMDD_HHMMSS[_NNN].wav`.
 - `ckpts/AuK` (Base), `ckpts/AuK-Flash` (distilled), `ckpts/Qwen2.5-Omni-3B` — weights; `ckpts/AuK-Flash/vae.safetensors` is a **hardlink** of the Base VAE (identical SHA-256). `scripts/download_models.py --variant {auk,flash,qwen}` fetches a subset and merges entries into `ckpts/.checksums.sha256`; `--reserve <GiB>` tunes the disk head-check.
 
@@ -34,8 +35,10 @@ export HF_ENDPOINT=https://hf-mirror.com
 python scripts/download_models.py            # aria2c download into ckpts/ + SHA-256 verify
 python scripts/download_models.py --verify-only
 
-./start_app.sh 7860                          # frees 7860, clears GPU, starts webui/app.py
-python -m webui.app --host 0.0.0.0 --port 7860   # manual start (no port/GPU cleanup)
+./start_app.sh 7860                          # loads .env, frees 7860, clears GPU, starts webui/app.py
+python -m webui.app --host 0.0.0.0 --port 7860   # manual start (no .env, no port/GPU cleanup)
+
+python scripts/local_llm_server.py --port 8000   # Qwen2.5-Omni-3B as an OpenAI-compatible endpoint
 ```
 
 The WebUI **lazily** loads a variant on first generation and never at startup; keep `ckpts/` next to `config.yaml`, since `config.yaml` resolves `ckpts/Qwen2.5-Omni-3B` relative to the CWD. Full details: [`docs/WEBUI.md`](docs/WEBUI.md).
@@ -43,8 +46,15 @@ The WebUI **lazily** loads a variant on first generation and never at startup; k
 There is no project-wide test suite. Run the smallest checks that cover your change and paste the exact commands and results into the PR. Changes to inference, model loading, sampling, audio I/O, or checkpoints require at least one end-to-end run per affected variant — record checkpoint revision, GPU, input, output, and memory. Gradio edits must also pass:
 
 ```bash
-python3 -c "from auk.infer.infer_gradio import build_demo; assert build_demo()"
+python3 -c "
+import auk.infer.infer_gradio as g
+g.CKPT_PATHS['AuK (Base)'] = 'ckpts/AuK/auk_base.safetensors'
+g.CONFIG_PATHS['AuK (Base)'] = 'ckpts/AuK/config.yaml'
+assert g.build_demo()
+"
 ```
+
+`CKPT_PATHS` is empty at import time (only `main()`'s argparse fills it), so a bare `assert build_demo()` raises `RuntimeError: No valid model checkpoint was configured.` in every checkout — seed the dict as above.
 
 ## Coding Style & Naming Conventions
 

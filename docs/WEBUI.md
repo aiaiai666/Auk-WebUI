@@ -5,15 +5,24 @@
 ## 启动
 
 ```bash
-# 一键启动（自动清端口 + 清显存 + 允许外部访问）
+# 一键启动（自动加载 .env + 清端口 + 清显存 + 按需拉起本地 LLM + 允许外部访问）
 ./start_app.sh 7860
 
-# 或手动启动
+# 或手动启动（不加载 .env，也不代管本地 LLM 服务）
 export HF_ENDPOINT=https://hf-mirror.com
 python -m webui.app --host 0.0.0.0 --port 7860
 ```
 
 打开 `http://<服务器IP>:7860`。
+
+`start_app.sh` 启动前会做五件事：
+
+1. 加载 `.env`（PE 的 LLM / ASR 凭据），没有则跳过；
+2. 确保 `fuser` 可用（缺则装 `psmisc`）；
+3. 无交互终止占用该端口的旧进程，并轮询确认端口真正释放；
+4. 清理占用显存的其它进程，保证本次运行独占 GPU；
+5. 若 `.env` 的 `LLM_BASE_URL` 指向 localhost 且服务未起，自动拉起本地 LLM 服务
+   （见 [本地 LLM 服务](#本地-llm-服务)），使勾选「使用 Prompt Enhancer」无需任何云端 LLM。
 
 启动参数：
 
@@ -26,7 +35,7 @@ python -m webui.app --host 0.0.0.0 --port 7860
 | `--preload` | 关 | 启动即加载模型（放弃懒加载） |
 | `--share` | 关 | 生成临时公网链接，仅演示用 |
 
-环境变量：`AUK_CKPT_DIR`、`AUK_OUTPUT_DIR`、`AUK_PRELOAD=1`、`HF_ENDPOINT`。
+环境变量：`AUK_CKPT_DIR`、`AUK_OUTPUT_DIR`、`AUK_PRELOAD=1`、`AUK_LOCAL_LLM=0`、`HF_ENDPOINT`。
 
 ## 下载模型
 
@@ -99,21 +108,61 @@ outputs_YYYYMMDD_HHMMSS_001.wav    # 同一秒内重复生成时自动追加序�
 
 ## Prompt Enhancer
 
-PE 靠 **LLM** 识别任务、抽取参数、生成规范指令——**没有本地兜底路径**，所以必须配一个 OpenAI 兼容端点，否则不可用。
+PE 靠 **LLM** 识别任务、抽取参数、生成规范指令。LLM 走 OpenAI 兼容的 Chat Completions 端点；
+不上 LLM 也能用：取消勾选「使用 Prompt Enhancer」，所有任务都可以直接写指令完成，PE 只是可选的增强步骤。
 
-两种配法：
+三种配法（前两种任选其一即可）：
 
-1. **界面直接填**（即刻生效，不写盘）：展开「🎧 主功能」页的 **Prompt Enhancer 设置**折叠面板，填
+1. **本地零成本**：`./start_app.sh` 会自动拉起 `scripts/local_llm_server.py`，把已下载的
+   `ckpts/Qwen2.5-Omni-3B` 以 OpenAI 兼容端点serve 在 `127.0.0.1:8000`，`.env` 里指向它即可。
+   详见下方 [本地 LLM 服务](#本地-llm-服务)。
+2. **环境变量**（长期生效）：`cp .env.example .env` 填好后用 `./start_app.sh` 重启。
+   页面三个输入框留空时回落到 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL_NAME`。
+3. **界面直接填**（即刻生效，不写盘）：展开「🎧 主功能」页的 **Prompt Enhancer 设置**折叠面板，填
    `API Key` / `Base URL` / `模型名`。勾选「使用 Prompt Enhancer」后会即时提示是否就绪。
-2. **环境变量**（长期生效）：`cp .env.example .env` 填好后重启。留空时界面输入优先读这三项：
-   `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL_NAME`。
+   只保存在当前浏览器会话。
 
 > `LLM_BASE_URL` 填 API 根地址，**不要**带 `/chat/completions`。
 
-不上 LLM 也能用：取消勾选「使用 Prompt Enhancer」，所有任务都可以直接写指令完成，PE 只是可选的增强步骤。
-
 音频转写（ASR）优先用腾讯云录制文件识别；无凭据或云端失败时，自动下载 `SenseVoiceSmall` 到 CPU 兜底
-（首次约 1 GiB）。
+（首次约 1 GiB，缓存在 `~/.cache/modelscope`）。
+
+分类响应会做结构校验（`task_type` / `operation_subtype` 是否合法）。弱模型（例如本地 3B）偶尔会漏填
+`operation_subtype`，此时 PE 会带上校验错误重问，最多 `api.llm.classify_max_attempts` 次
+（`src/auk/infer/pe.config.yaml`，默认 3）。这只保证**结构**合法，不保证参数抽取精度——追求精度请指到更强的模型。
+
+### 本地 LLM 服务
+
+`scripts/local_llm_server.py` 把 `ckpts/Qwen2.5-Omni-3B` 的 Thinker **文本**路径包成
+`/v1/chat/completions`（PE 只发纯文本，不发音频），从而完全避开云端 LLM。
+
+```bash
+# 手动起（start_app.sh 会在 .env 指向 localhost 时自动做这件事）
+python scripts/local_llm_server.py --port 8000 --served-model-name qwen-omni-3b
+
+curl http://127.0.0.1:8000/health
+```
+
+对应 `.env`：
+
+```bash
+LLM_API_KEY=local
+LLM_BASE_URL=http://127.0.0.1:8000/v1
+LLM_MODEL_NAME=qwen-omni-3b
+```
+
+几个必须知道的点：
+
+- **端点不鉴权**，默认只绑 `127.0.0.1`。要用别的地址得起 `--host 0.0.0.0`，请自行确认网络环境可信。
+- **常驻显存约 8.5 GiB**（3B bf16 权重约 7.6 GiB + KV）。每次生成后会 `empty_cache()`；
+  不加这一步 PyTorch 的 caching allocator 只涨不缩，实测能吃到 19.3 GiB，把 WebUI 挤到 OOM。
+- **`--max-new-tokens` 默认 1024**（约 45s）。PE 单次调用超时 120s（`api.llm.timeout_sec`），
+  上限由这个参数兜住。
+- **必须显式传 `eos_token_id`**：该 checkpoint 的 `generation_config.eos_token_id` 是 `None`，
+  `generate()` 不会自行停止，会一路吐 `Human:/Assistant:` 噪声，把 PE 的 JSON 解析带崩。
+- 配合 `start_app.sh` 使用时，本地 LLM 进程会被显存清理**豁免**（按端口识别），否则每次重启 WebUI
+  都会杀掉自己的 PE 依赖。不想要就 `AUK_LOCAL_LLM=0 ./start_app.sh 7860`。
+- Qwen2.5-Omni-3B 权重同时也是 AuK 的 text encoder，会被 `AukInfer` 单独加载一份；两者不共享显存。
 
 ## 页面结构
 
@@ -144,3 +193,6 @@ PE 靠 **LLM** 识别任务、抽取参数、生成规范指令——**没有本
 `start_app.sh` 会 **无交互** 终止占用目标端口的旧进程（只杀该 PID，不碰其它进程），并用
 `fuser $port/tcp` 轮询最多 3 秒确认端口真正释放后才启动主程序。启动前还会清理其它
 占用显存的进程，保证本次运行独占 GPU。
+
+唯一的例外是**本地 LLM 服务**：当 `.env` 的 `LLM_BASE_URL` 指向 localhost 时，脚本按端口识别并
+豁免该进程（见 [本地 LLM 服务](#本地-llm-服务)），避免重启 WebUI 时把自己的 PE 依赖一起杀掉。

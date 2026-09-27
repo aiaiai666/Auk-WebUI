@@ -446,6 +446,19 @@ its credentials are configured; if it is unavailable, AuK automatically
 downloads and lazily loads `iic/SenseVoiceSmall` as a CPU fallback. The
 `gradio` extra includes both cloud and local ASR dependencies.
 
+**No cloud LLM available?** `scripts/local_llm_server.py` serves the
+`ckpts/Qwen2.5-Omni-3B` you already downloaded as an OpenAI-compatible
+`/v1/chat/completions` endpoint, so PE works fully offline. It is a 3B model:
+fine for task routing, but point `LLM_BASE_URL` at a stronger model when you
+need precise parameter extraction. See [`docs/WEBUI.md`](docs/WEBUI.md#本地-llm-服务).
+
+```bash
+python scripts/local_llm_server.py --port 8000
+export LLM_API_KEY="local"
+export LLM_BASE_URL="http://127.0.0.1:8000/v1"
+export LLM_MODEL_NAME="qwen-omni-3b"
+```
+
 Choose the model according to your needs:
 
 - **AuK Base**: higher quality, with configurable NFE and CFG.

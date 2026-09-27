@@ -143,8 +143,10 @@ CPU offload 下模型常驻显存只有约 1.4 GiB，真正的大头是**推理�
 Base 质量更高、NFE/CFG 可调；Flash 是 4 步蒸馏模型，固定 NFE=4 且关闭 CFG，适合快速试参数。
 
 **Q4：勾了「使用 Prompt Enhancer」就报错？**
-PE 需要 LLM 来识别任务、抽取参数，**没有本地兜底**。展开「Prompt Enhancer 设置」填入
-API Key / Base URL / 模型名即可，或配好 `.env` 后重启。不配也能用——取消勾选，直接写指令就行。
+说明还没配 LLM 端点。最省事的办法是用本地已有的 Qwen2.5-Omni-3B：`./start_app.sh` 会在
+`.env` 指向 `127.0.0.1` 时自动起 `scripts/local_llm_server.py`，不需要任何云端 key。
+也可以展开「Prompt Enhancer 设置」填入 API Key / Base URL / 模型名，或配好 `.env` 后重启。
+不配也能用——取消勾选，直接写指令就行。
 
 **Q5：示例的音频格是空的？**
 表示该示例的音频文件仓库里没有（例如 Prompt Enhancer 的运行时产物）。
@@ -652,6 +654,7 @@ def run_task(
     instruction = instruction.strip()
     out_path = make_output_path()  # 先占名，失败时再删，避免留下半截文件
     pe_note = ""
+    prepared = None  # PE 的临时音频所有权在本函数，生成结束后才清理
 
     try:
         # ---- 懒加载模型：第一次生成时才真正吃显存 ----
@@ -670,7 +673,7 @@ def run_task(
                 gr.update(),
                 gr.update(),
             )
-            instruction, audio, ref_text, gen_text, target_seconds, pe_note = _prepare_with_pe(
+            instruction, audio, ref_text, gen_text, target_seconds, pe_note, prepared = _prepare_with_pe(
                 instruction,
                 audio,
                 ref_text,
@@ -723,6 +726,10 @@ def run_task(
             gr.update(),
         )
         return
+    finally:
+        # PE 可能在 /tmp 留下裁剪/归一化后的音频，必须等 engine.generate 读完之后再删。
+        if prepared is not None:
+            prepared.cleanup()
 
     seconds = out_audio.shape[-1] / sample_rate
     info = f"**已保存**：`{out_path}`\n\n时长 {seconds:.2f}s · 采样率 {sample_rate} Hz · 变体 {variant}" + (
@@ -744,31 +751,43 @@ def _prepare_with_pe(
     llm_api_key: str = "",
     llm_base_url: str = "",
     llm_model: str = "",
-) -> tuple[str, str | None, str, str, float, str]:
+) -> tuple[str, str | None, str, str, float, str, object]:
     """
     调用 Prompt Enhancer 预处理指令。
 
     Prompt Enhancer 的核心是**用 LLM 做任务分类与参数抽取**，因此必须有一个
     OpenAI 兼容端点；没有任何本地兜底路径。缺配置时给出可操作的提示，
     而不是把底层 ValueError 直接抛到用户脸上。
+
+    第七个返回值是 ``PromptEnhancerOutput``，**所有权交给调用方**：PE 某些任务
+    （VAD 裁剪、响度归一化）会写临时 wav 并把它作为 ``audio`` 返回，若在此处
+    ``cleanup()``，调用方拿到的就是一个已被删除的路径。所以清理必须延后到
+    真正消费完 ``audio`` 之后——与 ``infer_gradio.run_generate`` 的做法一致。
     """
     from auk.infer.pe import PromptEnhancer, PromptEnhancerError
 
-    if not (llm_api_key and llm_base_url and llm_model):
+    # 页面三个输入框留空时回落到 .env 的 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_NAME，
+    # 与 llm_ready() 同一套判定；只查入参会让「用环境变量」这条路径永远不可达。
+    if not llm_ready(llm_api_key, llm_base_url, llm_model):
         raise gr.Error(
             "**未配置 Prompt Enhancer 所需的 LLM。**\n\n"
-            "PE 靠 LLM 来识别任务、抽取参数，没有本地兜底，所以必须先配好 OpenAI 兼容端点：\n\n"
-            "方式一 · 环境变量（推荐，重启 WebUI 后长期生效）：\n"
-            "```bash\ncp .env.example .env      # 然后填入真实凭据\n"
+            "PE 靠 LLM 来识别任务、抽取参数。配一个 OpenAI 兼容端点即可，三种方式：\n\n"
+            "方式一 · 本地零成本（无需任何云端 key）：\n"
+            "```bash\n./start_app.sh 7860\n```\n"
+            "`.env` 里的 `LLM_BASE_URL` 指向 `http://127.0.0.1:8000/v1` 时，"
+            "启动脚本会自动拉起 `scripts/local_llm_server.py`，"
+            "复用已下载的 `ckpts/Qwen2.5-Omni-3B`。\n\n"
+            "方式二 · 云端 / 自建端点：\n"
+            "```bash\ncp .env.example .env      # 填入 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_NAME\n"
             "set -a; source ./.env; set +a\n./start_app.sh 7860\n```\n\n"
-            "方式二 · 在下方「Prompt Enhancer 设置」里直接填（即刻生效，无需重启）\n\n"
-            "需要 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME` 三项；"
+            "方式三 · 在下方「Prompt Enhancer 设置」里直接填（即刻生效，无需重启）\n\n"
             "`LLM_BASE_URL` 填 API 根地址，不要带 `/chat/completions`。\n\n"
             "> 如果只是想生成语音，把「使用 Prompt Enhancer」取消勾选即可——"
             "所有任务都可以直接写指令完成，PE 只是可选的增强步骤。"
         )
 
     prepared = None
+    handed_off = False
     try:
         prepared = PromptEnhancer(llm_api_key=llm_api_key, llm_base_url=llm_base_url, llm_model=llm_model).prepare(
             instruction,
@@ -783,14 +802,17 @@ def _prepare_with_pe(
         note = f"**PE 识别任务**：{task or '未知'}"
         if asr_text:
             note += f"\n\n**ASR 转写**：{asr_text}"
-        return (
+        result = (
             prepared.instruction,
             prepared.audio,
             prepared.ref_text,
             prepared.gen_text,
             (target_seconds if target_seconds > 0 else prepared.gen_seconds),
             note,
+            prepared,
         )
+        handed_off = True
+        return result
     except PromptEnhancerError as exc:
         raise gr.Error(f"Prompt Enhancer 失败：{exc}") from None
     except FileNotFoundError as exc:
@@ -801,7 +823,8 @@ def _prepare_with_pe(
             "请检查 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME` 是否正确、端点是否可达。"
         ) from None
     finally:
-        if prepared is not None:
+        # 只有失败路径（没交出去）才在这里清理；成功时由 run_task 负责。
+        if prepared is not None and not handed_off:
             prepared.cleanup()
 
 
@@ -893,9 +916,11 @@ def check_pe(use_pe: bool, key: str = "", base_url: str = "", model: str = ""):
             value=(
                 "⚠️ **Prompt Enhancer 还不可用**：未检测到 LLM 配置"
                 "（`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME`）。\n\n"
-                "PE 靠 LLM 识别任务、抽取参数，没有本地兜底。两种配法：\n\n"
-                "1. **在本页填**：展开下方「Prompt Enhancer 设置」直接填，即刻生效；\n"
-                "2. **用环境变量**：`cp .env.example .env` 填好后重启 `./start_app.sh`。\n\n"
+                "PE 靠 LLM 识别任务、抽取参数。三种配法：\n\n"
+                "1. **本地零成本**：`./start_app.sh` 会在 `.env` 指向 `127.0.0.1` 时自动拉起 "
+                "`scripts/local_llm_server.py`（复用已下载的 `ckpts/Qwen2.5-Omni-3B`），无需云端 key；\n"
+                "2. **在本页填**：展开下方「Prompt Enhancer 设置」直接填，即刻生效；\n"
+                "3. **用环境变量**：`cp .env.example .env` 填好后重启 `./start_app.sh`。\n\n"
                 "> 不配也能用：取消勾选，所有任务都可以直接写指令完成。"
             )
         ),
@@ -1273,9 +1298,11 @@ def build_demo() -> gr.Blocks:
 
                         with gr.Accordion("Prompt Enhancer 设置", open=False):
                             gr.Markdown(
-                                "PE 通过 LLM 识别任务并抽取参数，**没有本地兜底**，必须配一个 OpenAI 兼容端点。\n\n"
+                                "PE 通过 LLM 识别任务并抽取参数，需一个 OpenAI 兼容端点。\n\n"
                                 "留空则读环境变量 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME`"
-                                "（即 `.env` 里那份）。在此填写只保存在当前浏览器会话，不会写盘。"
+                                "（即 `.env` 里那份）。在此填写只保存在当前浏览器会话，不会写盘。\n\n"
+                                "> 没有云端 key？把 `.env` 的 `LLM_BASE_URL` 指向 `http://127.0.0.1:8000/v1`，"
+                                "`./start_app.sh` 会自动起本地服务复用 `ckpts/Qwen2.5-Omni-3B`。"
                             )
                             pe_llm_key = gr.Textbox(label="API Key", type="password", placeholder="sk-…")
                             pe_llm_url = gr.Textbox(
