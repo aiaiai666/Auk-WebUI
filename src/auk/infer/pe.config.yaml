@@ -128,7 +128,11 @@ runtime:
   whisper:
     target_lufs: -44.47
     target_rms: 0.0064
-    to_normal_target_rms: 0.000707945784384138
+    # Target RMS for whisper -> normal. MUST stay louder than target_rms above (whisper is the
+    # quiet end of the range); a value below it silently attenuates the reference into
+    # inaudibility and AuK then generates silence. -26 dBFS matches the level AuK emits for
+    # normal speech.
+    to_normal_target_rms: 0.05
     peak_ceiling: 0.95
   cleanup_keywords:
     denoise:

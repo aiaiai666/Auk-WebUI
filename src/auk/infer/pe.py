@@ -2004,9 +2004,13 @@ def _prepare_audio(
             current = trimmed
     if task_type == "whisper_edit":
         if operation_subtype == WHISPER_TO_NORMAL:
+            # whisper is the quiet end of the range, so converting *to* normal speech must land
+            # louder than the whisper target. Enforce that here instead of trusting the config:
+            # a target below it attenuates the reference into inaudibility, and since the model
+            # conditions on that reference it then emits silence -- with no error and no NaN.
             normalized = _normalize_audio_level(
                 audio_path,
-                target_rms=WHISPER_TO_NORMAL_TARGET_RMS,
+                target_rms=max(WHISPER_TO_NORMAL_TARGET_RMS, WHISPER_TARGET_RMS),
                 use_lufs=False,
             )
         elif operation_subtype == WHISPER_TO_WHISPER:
