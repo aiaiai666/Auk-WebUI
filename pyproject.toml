@@ -37,7 +37,11 @@ dependencies = [
 # Gradio UI, Prompt Enhancer, cloud ASR, and local SenseVoice fallback.
 # Install with: pip install -e ".[gradio]"
 gradio = [
-    "gradio>=6.0.0",
+    # gradio >= 6.18 requires huggingface-hub >= 1.0 (>= 1.16 from 6.19), but transformers 4.x caps the
+    # hub at < 1.0, so the two ranges cannot be satisfied together. Staying below 6.18 keeps the UI
+    # installable with the validated transformers 4.x line; drop this cap only after moving to
+    # transformers 5.x, which is the first release that allows huggingface-hub 1.x.
+    "gradio>=6.0.0,<6.18",
     "PyYAML>=6.0",
     "silero-vad>=6.0",
     "WeTextProcessing>=1.2.0",

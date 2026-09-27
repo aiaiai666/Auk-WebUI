@@ -257,6 +257,11 @@ The default installation includes PyTorch, TorchAudio, and TorchVision. If your
 platform requires a specific CPU or CUDA build, install a matching PyTorch stack
 for your platform first, then install AuK with either command above.
 
+The Gradio extra pins `gradio>=6.0.0,<6.18`: Gradio 6.18 and newer require
+`huggingface-hub>=1.0`, while the `transformers` 4.x line used here caps the hub at
+`<1.0`. Upgrading Gradio past that cap forces a `transformers` 5.x upgrade, so leave
+the pin alone unless you are prepared to validate the model on Transformers 5.
+
 ### Download the weights
 **🤗 HuggingFace**
 
