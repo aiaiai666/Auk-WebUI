@@ -47,6 +47,24 @@ _VAD_CONFIG = _RUNTIME["vad"]
 _WHISPER_CONFIG = _RUNTIME["whisper"]
 _DEFAULT_CLI_OUTPUT_DIR = Path("assets") / "after_pe"
 
+# Local ASR weights live under ckpts/ next to the other model releases so a checkout can be
+# relocated without depending on ~/.cache/modelscope. Resolved from __file__ rather than the CWD
+# because the WebUI, the CLI, and auk-gradio all run from different working directories.
+_LOCAL_ASR_DIR = Path(__file__).resolve().parents[3] / "ckpts" / "SenseVoiceSmall"
+_ASR_MODEL_ENV = "AUK_ASR_MODEL"
+_ASR_MODEL_ID = "iic/SenseVoiceSmall"
+
+
+def _default_asr_model() -> str:
+    """Prefer the in-repo copy of SenseVoiceSmall; fall back to the ModelScope id."""
+    override = str(os.environ.get(_ASR_MODEL_ENV) or "").strip()
+    if override:
+        return override
+    if (_LOCAL_ASR_DIR / "model.pt").is_file():
+        return str(_LOCAL_ASR_DIR)
+    return _ASR_MODEL_ID
+
+
 LLM_MAX_TOKENS = int(_LLM_CONFIG["max_tokens"])
 LLM_TEMPERATURE = float(_LLM_CONFIG["temperature"])
 LLM_TIMEOUT = int(_LLM_CONFIG["timeout_sec"])
@@ -563,12 +581,12 @@ class SenseVoiceSmallASR:
     def __init__(
         self,
         *,
-        model: str = "iic/SenseVoiceSmall",
+        model: str | None = None,
         device: str = "cpu",
         ncpu: int = 4,
         model_instance: Any | None = None,
     ):
-        self.model_name = model
+        self.model_name = str(model or _default_asr_model())
         self.device = device
         self.ncpu = max(1, int(ncpu))
         self._model_instance = model_instance
