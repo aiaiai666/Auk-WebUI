@@ -25,8 +25,8 @@ dependencies = [
     "qwen-omni-utils>=0.0.9",
     # qwen-omni-utils imports audioread at module scope but omits it from its own metadata,
     # so auk.infer.pe and AukInfer.build_cond_inputs both die with ModuleNotFoundError
-    # unless it is installed explicitly.
-    "audioread>=3.3",
+    # unless it is installed explicitly. 3.1.0 is the latest release.
+    "audioread>=3.1",
     "omegaconf>=2.3.0",
     "torchdiffeq",
     "x_transformers>=1.31.14",
