@@ -50,7 +50,7 @@ os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 # §CONFIG  配置区
 # ══════════════════════════════════════════════════════════════
 
-APP_TITLE = "AuK 语音生成与编辑工作台"
+APP_TITLE = "腾讯开源：AuK 语音生成与编辑工作台"
 APP_SUBTITLE_L1 = "webUI二次开发 by 科哥 | 微信：312088415 公众号：科哥玩AI"
 APP_SUBTITLE_L2 = "承诺永远开源使用 但是需要保留本人版权信息！"
 BROWSER_TITLE = f"{APP_TITLE} - 二次开发 by 科哥"
@@ -392,20 +392,20 @@ CSS = """
 /* 品牌 header：标题与副标题整体居中（需求：web 页面项目标题居中） */
 #app-header {
   margin: 2px 0 10px 0; padding: 14px 22px; border-radius: 16px;
-  background: linear-gradient(120deg, #1f2440 0%, #3a2b63 45%, #5b3a7e 100%);
+  background: linear-gradient(120deg, #2563eb 0%, #4f46e5 45%, #9333ea 100%);
   color: #fff;
-  box-shadow: 0 6px 20px rgba(40, 25, 80, .28);
+  box-shadow: 0 6px 20px rgba(79, 70, 229, .30);
   transition: transform .25s ease, box-shadow .25s ease;
 }
-#app-header:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(40, 25, 80, .42); }
+#app-header:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(79, 70, 229, .45); }
 #app-header .t,
 #app-header .s,
 #app-header .s2 { text-align: center; }
 #app-header .t { font-size: 22px; font-weight: 800; letter-spacing: .5px;
-  background: linear-gradient(90deg, #fff, #d9c9ff);
+  background: linear-gradient(90deg, #fff, #e0e7ff);
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-#app-header .s  { font-size: 13px; font-weight: 600; color: #d9c9ff; }
-#app-header .s2 { font-size: 12px; font-weight: 500; color: #e6dcff; opacity: .92; }
+#app-header .s  { font-size: 13px; font-weight: 600; color: #d7e2ff; }
+#app-header .s2 { font-size: 12px; font-weight: 500; color: #eef2ff; opacity: .92; }
 
 /* 组件级微调：只影响挂了对应 class 的组件 */
 .compact-audio .audio-container,
