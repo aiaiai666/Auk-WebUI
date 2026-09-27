@@ -8,6 +8,7 @@ Usage::
     python scripts/download_models.py                  # download + verify
     python scripts/download_models.py --verify-only    # re-verify only
     python scripts/download_models.py --variant auk    # only the DiT/VAE release
+    python scripts/download_models.py --variant asr    # only the local ASR weights
 
 Design notes
 ------------
@@ -84,6 +85,24 @@ MODEL_SETS: dict[str, tuple[str, str, list[str]]] = {
             "model-00001-of-00003.safetensors",
             "model-00002-of-00003.safetensors",
             "model-00003-of-00003.safetensors",
+        ],
+    ),
+    # Local ASR for the Prompt Enhancer, used when no Tencent Cloud ASR credentials are
+    # configured. auk.infer.pe resolves it from ckpts/ so a checkout stays self-contained.
+    # Only the files FunASR actually loads are listed; the upstream repo's README, demo.py,
+    # and example/ assets are not needed, and the ModelScope mirror carries an extra
+    # tokens.json that is not required either. ModelScope serves byte-identical files for
+    # this list, so `modelscope download --model iic/SenseVoiceSmall` stays a valid
+    # alternative source.
+    "asr": (
+        "SenseVoiceSmall",
+        "FunAudioLLM/SenseVoiceSmall",
+        [
+            "config.yaml",
+            "configuration.json",
+            "am.mvn",
+            "chn_jpn_yue_eng_ko_spectok.bpe.model",
+            "model.pt",
         ],
     ),
 }
@@ -423,8 +442,8 @@ def main() -> int:
     parser.add_argument(
         "--reserve",
         type=float,
-        default=RESERVE_BYTES,
-        help=f"required free space left after download, in GiB (default {RESERVE_BYTES / 1024**3:.0f})",
+        default=RESERVE_GIB,
+        help=f"required free space left after download, in GiB (default {RESERVE_GIB:g})",
     )
     parser.add_argument(
         "--threads",
