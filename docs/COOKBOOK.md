@@ -445,6 +445,17 @@ run_auk(
 )
 ```
 
+> [!IMPORTANT]
+> **Always check the output level for this task.** Both directions run a
+> level normalisation on the reference audio, so a target that points the wrong
+> way produces a perfectly valid file that is inaudible — no error, correct
+> duration, no `NaN`. `runtime.whisper.to_normal_target_rms` must stay *louder*
+> than `runtime.whisper.target_rms`, because whisper is the quiet end of the
+> range; `_prepare_audio` clamps this with `max(...)` so the invariant holds even
+> if the config is edited carelessly. When you touch either constant, print the
+> RMS of the result — normal speech is around **-26 dBFS**, and below
+> **-40 dBFS** is effectively silent.
+
 ---
 
 ## 5. Enhancement & Separation

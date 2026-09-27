@@ -315,8 +315,11 @@ The model checkpoint contains the diffusion transformer and layer-fusion weights
 
 #### Prompt Enhancer
 
-PE uses the same OpenAI-compatible LLM environment variables described above.
-Load them from `.env`, then run:
+PE needs an OpenAI-compatible LLM. It reads `LLM_API_KEY`, `LLM_BASE_URL`, and
+`LLM_MODEL_NAME` from the environment — see
+[Interactive Gradio demo](#interactive-gradio-demo) for how to configure them,
+including the fully local option that needs no cloud key at all. Load them, then
+run:
 
 ```bash
 set -a
@@ -629,10 +632,28 @@ Besides the built-in Gradio demo (`auk-gradio`), the repository ships a secondar
 ```bash
 export HF_ENDPOINT=https://hf-mirror.com
 python scripts/download_models.py     # download weights into ckpts/ + SHA-256 verify
-./start_app.sh 7860                   # frees the port, clears the GPU, then launches
+./start_app.sh 7860                   # loads .env, frees the port, clears the GPU, launches
 ```
 
-`start_app.sh` terminates any stale process on port 7860 without prompting (and only that process), confirms the port is really released via `fuser $port/tcp`, and clears other GPU processes so the run owns the GPU. It defaults to `cpu_offload`, needed because AuK Base peaks at ~24.78 GiB — more than a 24 GiB card. See [`docs/WEBUI.md`](docs/WEBUI.md) for parameters, Prompt Enhancer, and the four tabs.
+`start_app.sh` loads `.env` (so the Prompt Enhancer credentials and the local
+LLM endpoint take effect), terminates any stale process on port 7860 without
+prompting (and only that process), confirms the port is really released via
+`fuser $port/tcp`, and clears other GPU processes so the run owns the GPU. When
+`LLM_BASE_URL` points at loopback it also starts
+[`scripts/local_llm_server.py`](#interactive-gradio-demo) for you and exempts
+that process from the GPU cleanup, so restarting the WebUI never kills its own
+Prompt Enhancer backend — set `AUK_LOCAL_LLM=0` to opt out. It defaults to
+`cpu_offload`, needed because AuK Base peaks at ~24.78 GiB — more than a 24 GiB
+card. See [`docs/WEBUI.md`](docs/WEBUI.md) for parameters, Prompt Enhancer, and
+the four tabs.
+
+> **Check the output level, not just the exit status.** A generation can
+> succeed, write a file of the right length, and still be inaudible — a level
+> target that points the wrong way will not raise, and `NaN` guards do not
+> catch it. When you change a level-related constant, print the RMS of the
+> result (`20*log10(rms)`, where normal speech sits around **-26 dBFS** and
+> anything below **-40 dBFS** is effectively silent) and compare against a run
+> with the feature disabled.
 
 ## Contributing
 

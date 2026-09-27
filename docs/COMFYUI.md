@@ -25,6 +25,10 @@ AuK `.env` used by Gradio into this shell **before starting ComfyUI**; the nodes
 do not load it automatically. Open the local address or the server's forwarded
 address, using its configured port.
 
+If that `.env` points `LLM_BASE_URL` at loopback, start the local LLM server
+yourself first — only `./start_app.sh` launches it for you, and ComfyUI does
+not. See [the local LLM service](../docs/WEBUI.md#本地-llm-服务).
+
 ## Run a workflow
 
 Open [`auk.json`](../comfyui/workflows/auk.json), check the paths and device in
