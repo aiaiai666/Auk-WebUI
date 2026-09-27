@@ -40,7 +40,7 @@ import requests
 
 DEFAULT_ENDPOINT = "https://hf-mirror.com"
 CHUNK_SIZE = 4 * 1024 * 1024
-RESERVE_BYTES = 3 * 1024**3  # keep this much free for the rest of the toolchain
+RESERVE_GIB = 3.0  # keep this much free for the rest of the toolchain
 PROGRESS_INTERVAL = 5.0
 MAX_INLINE_HASH = 64 * 1024**2  # refuse to hash a big non-LFS file in memory
 
