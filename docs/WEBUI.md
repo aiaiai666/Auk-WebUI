@@ -54,7 +54,8 @@ python scripts/download_models.py --verify-only  # re-verify only
 python scripts/download_models.py --variant auk  # only the DiT/VAE release
 ```
 
-模型按需分批下载，`--variant` 可选 `auk`（Base）、`flash`（AuK-Flash）、`qwen`（编码器）、`all`：
+模型按需分批下载，`--variant` 可选 `auk`（Base）、`flash`（AuK-Flash）、`qwen`（编码器）、
+`asr`（本地 ASR 权重 SenseVoiceSmall）、`all`：
 
 ```bash
 # 空间紧张时只补 Flash，并把磁盘预留门槛从默认 3 GiB 降到 1.5 GiB
@@ -124,8 +125,15 @@ PE 靠 **LLM** 识别任务、抽取参数、生成规范指令。LLM 走 OpenAI
 
 > `LLM_BASE_URL` 填 API 根地址，**不要**带 `/chat/completions`。
 
-音频转写（ASR）优先用腾讯云录制文件识别；无凭据或云端失败时，自动下载 `SenseVoiceSmall` 到 CPU 兜底
-（首次约 1 GiB，缓存在 `~/.cache/modelscope`）。
+音频转写（ASR）优先用腾讯云录制文件识别；无凭据或云端失败时，回落到本地
+`SenseVoiceSmall`（CPU，首次约 1 GiB）。权重放在 `ckpts/SenseVoiceSmall/`，和其它模型一起
+随仓库迁移；**路径相对仓库根目录解析**，因此 WebUI、CLI、`auk-gradio` 从不同工作目录启动都能找到。
+若该目录不存在，则自动下载到 ModelScope 缓存（`~/.cache/modelscope`）。用 `AUK_ASR_MODEL`
+可以指向别处。
+
+```bash
+modelscope download --model iic/SenseVoiceSmall --local_dir ./ckpts/SenseVoiceSmall
+```
 
 分类响应会做结构校验（`task_type` / `operation_subtype` 是否合法）。弱模型（例如本地 3B）偶尔会漏填
 `operation_subtype`，此时 PE 会带上校验错误重问，最多 `api.llm.classify_max_attempts` 次

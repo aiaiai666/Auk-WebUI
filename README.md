@@ -291,6 +291,9 @@ modelscope download --model Tencent-Hunyuan/AuK-Flash  --local_dir ./ckpts/AuK-F
 
 # MLLM Encoder
 modelscope download --model Qwen/Qwen2.5-Omni-3B --local_dir ./ckpts/Qwen2.5-Omni-3B
+
+# Local ASR for the Prompt Enhancer (only needed without Tencent Cloud ASR credentials)
+modelscope download --model iic/SenseVoiceSmall --local_dir ./ckpts/SenseVoiceSmall
 ```
 
 The expected directory structure is:
@@ -299,10 +302,17 @@ The expected directory structure is:
 ckpts/
 ├── AuK/
 ├── AuK-Flash/          # optional
-└── Qwen2.5-Omni-3B/
+├── Qwen2.5-Omni-3B/
+└── SenseVoiceSmall/    # optional, local ASR for the Prompt Enhancer
 ```
 
 The model checkpoint contains the diffusion transformer and layer-fusion weights. The MLLM encoder and VAE are loaded from separate files at runtime, so missing `text_encoder.*` keys during checkpoint loading are expected.
+
+All four directories sit inside the repository, so a checkout can be relocated
+without depending on `~/.cache`. `SenseVoiceSmall` is resolved relative to this
+repository rather than the working directory, and `AUK_ASR_MODEL` overrides it if
+you keep the weights somewhere else. If the directory is absent, the Prompt
+Enhancer falls back to downloading SenseVoiceSmall into the ModelScope cache.
 
 
 ### Command-line inference

@@ -15,7 +15,7 @@ The package uses a `src/` layout:
 - `scripts/local_llm_server.py` — serves `ckpts/Qwen2.5-Omni-3B` as an OpenAI-compatible `/v1/chat/completions` so the Prompt Enhancer needs no cloud LLM; `start_app.sh` auto-starts it when `.env`'s `LLM_BASE_URL` points at loopback.
 - `start_app.sh` — one-shot launcher: loads `.env`, frees port 7860, clears other GPU processes (exempting the local LLM server by port), auto-starts that server, then starts `webui/app.py` on `0.0.0.0:7860`.
 - `outputs/` — generated wav files, named `outputs_YYYYMMDD_HHMMSS[_NNN].wav`.
-- `ckpts/AuK` (Base), `ckpts/AuK-Flash` (distilled), `ckpts/Qwen2.5-Omni-3B` — weights; `ckpts/AuK-Flash/vae.safetensors` is a **hardlink** of the Base VAE (identical SHA-256). `scripts/download_models.py --variant {auk,flash,qwen}` fetches a subset and merges entries into `ckpts/.checksums.sha256`; `--reserve <GiB>` tunes the disk head-check.
+- `ckpts/AuK` (Base), `ckpts/AuK-Flash` (distilled), `ckpts/Qwen2.5-Omni-3B` (encoder + local LLM), `ckpts/SenseVoiceSmall` (PE fallback ASR) — weights; `ckpts/AuK-Flash/vae.safetensors` is a **hardlink** of the Base VAE (identical SHA-256). `scripts/download_models.py --variant {auk,flash,qwen,asr}` fetches a subset and merges entries into `ckpts/.checksums.sha256`; `--reserve <GiB>` tunes the disk head-check. `SenseVoiceSmall` is resolved from `ckpts/` via `Path(__file__).parents[3]`, not the CWD, so the WebUI, CLI, and `auk-gradio` all find it; set `AUK_ASR_MODEL` to override.
 
 ## Build, Test, and Development Commands
 
