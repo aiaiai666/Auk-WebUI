@@ -1,0 +1,42 @@
+# AuK dependencies (direct only — transitive dependencies are not pinned).
+#
+# Canonical source of truth is pyproject.toml. This file exists for environments that
+# cannot use the extras, e.g.:
+#
+#     pip install -r requirements.txt
+#
+# Equivalent, and preferred because it keeps a single source of truth:
+#
+#     pip install -e ".[gradio]"     # core inference + Gradio + Prompt Enhancer + ASR
+#     pip install -e ".[comfyui]"    # core inference + ComfyUI nodes + Prompt Enhancer + ASR
+#     pip install -e ".[train]"      # adds fine-tuning deps for src/auk/train/train.py
+#
+# Keep the torch family on the tested 2.7 ABI line. Preinstall a platform-specific
+# CPU/CUDA build first if your platform needs one.
+
+# --- core inference (src/auk/infer, src/auk/model) ---
+torch>=2.7,<2.8
+torchaudio>=2.7,<2.8
+torchvision>=0.22,<0.23
+# Qwen2.5-Omni support landed in transformers 4.52; the release was validated on 4.57.
+transformers>=4.52.0,<5
+qwen-omni-utils>=0.0.9
+# qwen-omni-utils imports audioread at module scope but omits it from its own metadata.
+audioread>=3.1
+omegaconf>=2.3.0
+torchdiffeq
+x_transformers>=1.31.14
+safetensors
+accelerate>=0.33.0
+
+# --- [gradio] / [comfyui]: WebUI, Prompt Enhancer, cloud ASR, local SenseVoice fallback ---
+# gradio >= 6.18 needs huggingface-hub >= 1.0, which transformers 4.x caps below.
+gradio>=6.0.0,<6.18
+PyYAML>=6.0
+silero-vad>=6.0
+WeTextProcessing>=1.2.0
+pyloudnorm>=0.2.0
+openai>=1.0.0
+tencentcloud-sdk-python-asr>=3.0.0
+funasr>=1.3,<2
+modelscope>=1.20,<2
