@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import random
@@ -28,6 +29,8 @@ from tencentcloud.common import credential
 from tencentcloud.common.profile.client_profile import ClientProfile
 from tencentcloud.common.profile.http_profile import HttpProfile
 
+logger = logging.getLogger(__name__)
+
 _CONFIG_PATH = Path(__file__).with_name("pe.config.yaml")
 _PE_CONFIG = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8"))
 _LLM_CONFIG = _PE_CONFIG["api"]["llm"]
@@ -47,6 +50,8 @@ _DEFAULT_CLI_OUTPUT_DIR = Path("assets") / "after_pe"
 LLM_MAX_TOKENS = int(_LLM_CONFIG["max_tokens"])
 LLM_TEMPERATURE = float(_LLM_CONFIG["temperature"])
 LLM_TIMEOUT = int(_LLM_CONFIG["timeout_sec"])
+CLASSIFY_MAX_ATTEMPTS = max(1, int(_LLM_CONFIG.get("classify_max_attempts", 1)))
+
 ASR_ENDPOINT = str(_ASR_CONFIG["endpoint"])
 ASR_ENGINE_MODEL_TYPE = str(_ASR_CONFIG["engine_model_type"])
 ASR_SAMPLE_RATE = int(_ASR_CONFIG["sample_rate"])
@@ -154,6 +159,16 @@ def _render_capabilities() -> str:
 
 def _build_classify_prompt() -> str:
     return str(_PROMPTS["classify"]).format(capabilities=_render_capabilities())
+
+
+def _classify_repair_hint(error: Exception) -> str:
+    """把校验错误回喂给 LLM，让它自己改对后重答一个 JSON。"""
+    return (
+        f"上一次回答未通过校验：{error}\n\n"
+        "请**只**重新输出一个完整的 JSON object（不要任何解释文字、不要 markdown 代码块），"
+        "并修正上述问题。若 task_type 带有 operation_subtype 约束，"
+        "operation_subtype 必须从合法值里挑一个最贴近用户意图的字符串，null 不合法。"
+    )
 
 
 def _task_normalization_context(
@@ -782,12 +797,12 @@ class PromptEnhancer:
 
         llm_calls: list[LLMCall] = []
         asr = self._transcribe(audio_path) if audio_path else None
-        classified, classify_call = self._classify(
+        classified, _, classify_calls = self._classify(
             user_instruction,
             audio_path=audio_path,
             asr=asr,
         )
-        llm_calls.append(classify_call)
+        llm_calls.extend(classify_calls)
         if not classified.supported:
             raise UnsupportedRequestError(classified.reasoning or "请求不在 AuK 单步能力范围内")
         if _TASKS[classified.task_type]["needs_audio"] and not audio_path:
@@ -935,14 +950,35 @@ class PromptEnhancer:
                 user_lines.append(f"【ASR 检测语种】{asr.language or '未知'}")
         else:
             user_lines = ["【用户未上传任何参考/输入音频，只能做纯文本合成 instruct_tts】", instruction]
-        call = self._call_llm(
-            "classify",
-            [
-                {"role": "system", "content": _build_classify_prompt()},
-                {"role": "user", "content": "\n".join(user_lines)},
-            ],
-        )
-        obj = _extract_json(call.content)
+
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": _build_classify_prompt()},
+            {"role": "user", "content": "\n".join(user_lines)},
+        ]
+        llm_calls: list[LLMCall] = []
+        last_error: PromptEnhancerError | None = None
+
+        for attempt in range(1, CLASSIFY_MAX_ATTEMPTS + 1):
+            call = self._call_llm("classify", messages)
+            llm_calls.append(call)
+            try:
+                return self._parse_classified(call.content, instruction), call, llm_calls
+            except PromptEnhancerError as exc:
+                last_error = exc
+                if attempt >= CLASSIFY_MAX_ATTEMPTS:
+                    break
+                logger.warning(
+                    f"classify 第 {attempt} 次响应不合法（{exc}），带上错误重试 {attempt + 1}/{CLASSIFY_MAX_ATTEMPTS} ..."
+                )
+                messages = messages + [
+                    {"role": "assistant", "content": call.content},
+                    {"role": "user", "content": _classify_repair_hint(exc)},
+                ]
+
+        raise last_error or PromptEnhancerError("classify 失败")
+
+    def _parse_classified(self, content: str, instruction: str) -> _Classified:
+        obj = _extract_json(content)
         supported = obj.get("supported")
         if not isinstance(supported, bool):
             raise PromptEnhancerError("分类响应 supported 必须是 boolean")
@@ -971,18 +1007,18 @@ class PromptEnhancer:
             task_type = "vocal_edit"
             subtype = None
             params = {"orig": params.get("orig"), "new": params.get("new")}
-        return (
-            _Classified(
-                supported=supported,
-                task_type=task_type,
-                operation_subtype=subtype,
-                params_extracted=params,
-                needs_text=bool(obj.get("needs_text", False)),
-                reasoning=str(obj.get("reasoning") or ""),
-                language=language,
-                text_language=text_language,
-            ),
-            call,
+        legal = _TASKS[task_type].get("subtypes") or [] if task_type in _TASKS else []
+        if supported and legal and subtype not in legal:
+            raise PromptEnhancerError(f"{task_type} 缺少或包含非法 operation_subtype: {subtype!r}（合法值: {legal}）")
+        return _Classified(
+            supported=supported,
+            task_type=task_type,
+            operation_subtype=subtype,
+            params_extracted=params,
+            needs_text=bool(obj.get("needs_text", False)),
+            reasoning=str(obj.get("reasoning") or ""),
+            language=language,
+            text_language=text_language,
         )
 
     def _rewrite_description(

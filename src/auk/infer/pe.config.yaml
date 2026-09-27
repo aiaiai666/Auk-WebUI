@@ -3,6 +3,10 @@ api:
     max_tokens: 4096
     temperature: 0
     timeout_sec: 120
+    # A weak classifier (e.g. a local 3B model) sometimes returns a legal task_type with a
+    # missing/illegal operation_subtype. Re-ask with the validation error appended instead of
+    # failing the whole request; 1 = no retry (previous behaviour).
+    classify_max_attempts: 3
   asr:
     endpoint: asr.tencentcloudapi.com
     engine_model_type: 16k_zh_en
